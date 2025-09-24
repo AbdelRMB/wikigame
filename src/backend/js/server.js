@@ -15,10 +15,10 @@ import dotenv from "dotenv";
 import cors from 'cors';
 import Game from "../models/Game.js";
 import Player from "../models/Player.js";
-import {WebSocket, WebSocketServer} from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import bodyParser from 'body-parser';
 import cron from 'node-cron';
-import {postRequest} from "../services/apiService.js";
+import { postRequest } from "../services/apiService.js";
 import Challenge from "../models/Challenge.js";
 
 const PORT = process.env.PORT || 5000;
@@ -26,7 +26,39 @@ const PORT = process.env.PORT || 5000;
 dotenv.config();
 
 const app = express();
-app.use(cors());
+const allowedOrigins = [
+    "https://wikigame.abdelrahimriche.com",
+    "https://apiwikigame.abdelrahimriche.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://localhost:4173",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:4173"
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        // Check if the origin is in the allowed list
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        
+        // Allow localhost origins for development (any port)
+        if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+            return callback(null, true);
+        }
+        
+        // For production, be strict
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    credentials: true
+}));
+app.options("*", cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/wikigame';
@@ -81,39 +113,39 @@ async function handleGameStateChange(gameCode, event) {
 
             case 'player_leave':
                 const playerId = event.data.playerId;
-                
+
                 // Only remove player if game is not in progress
                 if (game.status !== 'in_progress') {
                     // Find the player in the game
-                    const playerIndex = game.players.findIndex(p => 
+                    const playerIndex = game.players.findIndex(p =>
                         p.player_id && p.player_id.toString() === playerId
                     );
-                    
+
                     if (playerIndex === -1) {
                         console.log(`Player ${playerId} not found in game ${gameCode}, nothing to remove`);
                         return;
                     }
-                    
+
                     // Check if player was host
                     const wasHost = game.players[playerIndex].is_host;
-                    
+
                     // Remove the player
                     game.players.splice(playerIndex, 1);
 
-                // Only delete the game if it's in the lobby state and has no players
-                // Don't delete games that are in progress or completed
-                if (game.players.length === 0 && game.status === 'lobby') {
-                    console.log(`Deleting empty lobby game: ${game._id}`);
-                    await Game.deleteOne({ _id: game._id });
-                    return;
-                } else if (game.players.length === 0) {
-                    console.log(`Game ${game._id} has no players but status is ${game.status}, not deleting`);
-                }
+                    // Only delete the game if it's in the lobby state and has no players
+                    // Don't delete games that are in progress or completed
+                    if (game.players.length === 0 && game.status === 'lobby') {
+                        console.log(`Deleting empty lobby game: ${game._id}`);
+                        await Game.deleteOne({ _id: game._id });
+                        return;
+                    } else if (game.players.length === 0) {
+                        console.log(`Game ${game._id} has no players but status is ${game.status}, not deleting`);
+                    }
 
-                // If host leaves, assign new host
-                if (wasHost && game.players.length > 0) {
-                    game.players[0].is_host = true;
-                    // Broadcast host change event
+                    // If host leaves, assign new host
+                    if (wasHost && game.players.length > 0) {
+                        game.players[0].is_host = true;
+                        // Broadcast host change event
                         broadcastToLobby(gameCode, {
                             type: 'host_change',
                             data: {
@@ -121,7 +153,7 @@ async function handleGameStateChange(gameCode, event) {
                             }
                         });
                     }
-                    
+
                     // Save the updated game
                     try {
                         await game.save();
@@ -134,10 +166,10 @@ async function handleGameStateChange(gameCode, event) {
                             const refreshedGame = await Game.findOne({ game_code: gameCode });
                             if (refreshedGame) {
                                 // Re-apply the player removal
-                                const refreshedPlayerIndex = refreshedGame.players.findIndex(p => 
+                                const refreshedPlayerIndex = refreshedGame.players.findIndex(p =>
                                     p.player_id && p.player_id.toString() === playerId
                                 );
-                                
+
                                 if (refreshedPlayerIndex !== -1) {
                                     refreshedGame.players.splice(refreshedPlayerIndex, 1);
                                     await refreshedGame.save();
@@ -164,7 +196,7 @@ async function handleGameStateChange(gameCode, event) {
                 game.settings.articles_number = newSettings.articles_number;
                 game.settings.visibility = newSettings.visibility;
                 game.settings.allow_join = newSettings.allow_join;
-                
+
                 // Update enabled_artifacts if provided
                 if (newSettings.enabled_artifacts) {
                     // Convert the enabled_artifacts object to an array of enabled artifact names
@@ -172,7 +204,7 @@ async function handleGameStateChange(gameCode, event) {
                     const enabledArtifactsArray = Object.entries(newSettings.enabled_artifacts)
                         .filter(([_, enabled]) => enabled === true)
                         .map(([artifact]) => artifact);
-                    
+
                     // If no artifacts are enabled, use all artifacts
                     if (enabledArtifactsArray.length === 0) {
                         game.settings.enabled_artifacts = [
@@ -183,7 +215,7 @@ async function handleGameStateChange(gameCode, event) {
                     } else {
                         game.settings.enabled_artifacts = enabledArtifactsArray;
                     }
-                    
+
                     console.log('Updated enabled_artifacts:', game.settings.enabled_artifacts);
                 } else {
                     // If no enabled_artifacts provided, use all artifacts
@@ -196,7 +228,7 @@ async function handleGameStateChange(gameCode, event) {
 
                 // Save the game with updated settings
                 await game.save();
-                
+
                 // Verify the save
                 const verifyGame = await Game.findOne({ game_code: gameCode });
                 if (verifyGame && verifyGame.settings) {
@@ -218,16 +250,16 @@ async function handleGameStateChange(gameCode, event) {
 
                         game.status = 'in_progress';
                         game.start_time = new Date();
-                        
+
                         // Save enabled artifacts if provided
                         if (event.data.enabledArtifacts && Array.isArray(event.data.enabledArtifacts)) {
                             console.log('Received enabledArtifacts:', event.data.enabledArtifacts);
-                            
+
                             // Ensure settings object exists
                             if (!game.settings) {
                                 game.settings = {};
                             }
-                            
+
                             // If no artifacts are provided or the array is empty, use all artifacts
                             if (event.data.enabledArtifacts.length === 0) {
                                 // Default list of all artifacts
@@ -240,13 +272,13 @@ async function handleGameStateChange(gameCode, event) {
                                 // Save enabled artifacts in settings and ensure it's an array
                                 game.settings.enabled_artifacts = [...event.data.enabledArtifacts];
                             }
-                            
+
                             console.log(`Saving ${game.settings.enabled_artifacts.length} enabled artifacts in settings for game ${gameCode}`);
                             console.log('Game settings before save:', JSON.stringify(game.settings, null, 2));
-                            
+
                             // Save the game with the updated settings
                             await game.save();
-                            
+
                             // Verify the save worked by reloading the game
                             const verifyGame = await Game.findOne({ game_code: gameCode });
                             if (verifyGame && verifyGame.settings) {
@@ -260,13 +292,13 @@ async function handleGameStateChange(gameCode, event) {
                             if (!game.settings) {
                                 game.settings = {};
                             }
-                            
+
                             // Default list of all artifacts
                             game.settings.enabled_artifacts = [
                                 "GPS", "Backtrack", "Teleporter", "Mine", "Snail",
                                 "Eraser", "Disorienter", "Dictator"
                             ];
-                            
+
                             console.log('No enabledArtifacts provided, using all artifacts');
                             await game.save();
                         }
@@ -274,10 +306,10 @@ async function handleGameStateChange(gameCode, event) {
                         // Ensure all players in the lobby are in the game's players array
                         const lobbyClients = lobbies.get(gameCode) || new Set();
                         console.log(`Found ${lobbyClients.size} clients in lobby ${gameCode}`);
-                        
+
                         // Important: Do NOT remove the lobby when the game starts
                         // The lobby is still needed for chat and other communications
-                        
+
                         // Get all player IDs from the lobby
                         const lobbyPlayerIds = new Set();
                         for (const client of lobbyClients) {
@@ -286,7 +318,7 @@ async function handleGameStateChange(gameCode, event) {
                                 console.log(`Found player ${client.currentPlayerId} in lobby ${gameCode}`);
                             }
                         }
-                        
+
                         // Also check the playerSockets map
                         for (const [playerId, ws] of playerSockets.entries()) {
                             if (ws.currentLobby === gameCode) {
@@ -294,16 +326,16 @@ async function handleGameStateChange(gameCode, event) {
                                 console.log(`Found player ${playerId} in playerSockets map for lobby ${gameCode}`);
                             }
                         }
-                        
+
                         // Check if any players need to be added to the game
                         for (const playerId of lobbyPlayerIds) {
                             // Check if player is already in the game
                             const playerObjectId = new mongoose.Types.ObjectId(playerId);
                             const playerInGame = game.players.some(p => p.player_id.equals(playerObjectId));
-                            
+
                             if (!playerInGame) {
                                 console.log(`Adding player ${playerId} to game ${gameCode}`);
-                                
+
                                 // Add player to game
                                 game.players.push({
                                     player_id: playerObjectId,
@@ -313,7 +345,7 @@ async function handleGameStateChange(gameCode, event) {
                                     score: 0,
                                     is_host: false
                                 });
-                                
+
                                 // Update player's current game
                                 try {
                                     const player = await Player.findById(playerId);
@@ -342,25 +374,25 @@ async function handleGameStateChange(gameCode, event) {
                         try {
                             // Add a small delay to ensure the game is fully saved before making API calls
                             await new Promise(resolve => setTimeout(resolve, 500));
-                            
+
                             // Use direct API call instead of fetch to avoid potential network issues
                             const articlesResult = await callAPI('/games/random-articles', {
                                 id_game: game._id.toString(),
                                 number: articlesNumber
                             });
-                            
+
                             console.log('Random articles distributed:', articlesResult);
                             articlesDistributed = true;
-                            
+
                             // Add another small delay before distributing artifacts
                             await new Promise(resolve => setTimeout(resolve, 500));
-                            
+
                             // Distribute artifacts to players
                             const artifactsResult = await callAPI('/games/distribute-artifacts', {
                                 id_game: game._id.toString(),
                                 enabledArtifacts: event.data.enabledArtifacts || []
                             });
-                            
+
                             console.log('Artifacts distributed:', artifactsResult);
                             artifactsDistributed = true;
                         } catch (error) {
@@ -384,10 +416,10 @@ async function handleGameStateChange(gameCode, event) {
 
                         // Don't broadcast here - the WebSocket handler already did that
                         // Just return the event for the WebSocket handler to use
-                        
+
                         // Save game state again after all operations
                         await game.save();
-                        
+
                         return gameStartEvent;
                     } catch (error) {
                         console.error('Error handling game start:', error);
@@ -449,27 +481,27 @@ async function handleGameStateChange(gameCode, event) {
             case 'player_ban':
                 const banPlayerId = event.data.playerId;
                 const banReason = event.data.reason || 'No reason provided';
-                
+
                 // Only host can ban players
-                const requestingPlayer = game.players.find(p => 
+                const requestingPlayer = game.players.find(p =>
                     p.player_id && p.player_id.toString() === event.data.hostId
                 );
-                
+
                 if (!requestingPlayer || !requestingPlayer.is_host) {
                     console.error(`Ban request denied: Player ${event.data.hostId} is not the host of game ${gameCode}`);
                     return;
                 }
-                
+
                 // Check if player is already banned
-                const alreadyBanned = game.banned_players.some(p => 
+                const alreadyBanned = game.banned_players.some(p =>
                     p.player_id && p.player_id.toString() === banPlayerId
                 );
-                
+
                 if (alreadyBanned) {
                     console.log(`Player ${banPlayerId} is already banned from game ${gameCode}`);
                     // Update the ban reason if provided
                     if (banReason && banReason !== 'No reason provided') {
-                        const bannedPlayerIndex = game.banned_players.findIndex(p => 
+                        const bannedPlayerIndex = game.banned_players.findIndex(p =>
                             p.player_id && p.player_id.toString() === banPlayerId
                         );
                         if (bannedPlayerIndex !== -1) {
@@ -486,51 +518,51 @@ async function handleGameStateChange(gameCode, event) {
                     });
                     console.log(`Player ${banPlayerId} has been banned from game ${gameCode}. Reason: ${banReason}`);
                 }
-                
+
                 // Find the player in the game
-                const bannedPlayerIndex = game.players.findIndex(p => 
+                const bannedPlayerIndex = game.players.findIndex(p =>
                     p.player_id && p.player_id.toString() === banPlayerId
                 );
-                
+
                 if (bannedPlayerIndex === -1) {
                     console.log(`Player ${banPlayerId} not found in game ${gameCode}, nothing to remove but ban recorded`);
                 } else {
                     // Remove the player from the game
                     game.players.splice(bannedPlayerIndex, 1);
                 }
-                
+
                 await game.save();
                 break;
-                
+
             case 'player_kick':
                 const kickPlayerId = event.data.playerId;
                 const kickReason = event.data.reason || 'No reason provided';
-                
+
                 // Only host can kick players
-                const hostPlayer = game.players.find(p => 
+                const hostPlayer = game.players.find(p =>
                     p.player_id && p.player_id.toString() === event.data.hostId
                 );
-                
+
                 if (!hostPlayer || !hostPlayer.is_host) {
                     console.error(`Kick request denied: Player ${event.data.hostId} is not the host of game ${gameCode}`);
                     return;
                 }
-                
+
                 // Find the player in the game
-                const kickedPlayerIndex = game.players.findIndex(p => 
+                const kickedPlayerIndex = game.players.findIndex(p =>
                     p.player_id && p.player_id.toString() === kickPlayerId
                 );
-                
+
                 if (kickedPlayerIndex === -1) {
                     console.log(`Player ${kickPlayerId} not found in game ${gameCode}, nothing to remove`);
                     return;
                 }
-                
+
                 // Remove the player from the game
                 game.players.splice(kickedPlayerIndex, 1);
-                
+
                 console.log(`Player ${kickPlayerId} has been kicked from game ${gameCode}. Reason: ${kickReason}`);
-                
+
                 await game.save();
                 break;
         }
@@ -561,11 +593,11 @@ function setupWebSocketServer() {
             threshold: 1024 // Size (in bytes) below which messages should not be compressed
         }
     });
-    
+
     // Set up heartbeat interval to detect dead connections
     const heartbeatInterval = setInterval(() => {
         const now = Date.now();
-        
+
         // Check each client's last activity
         for (const [client, lastActivity] of clientActivity.entries()) {
             // If no activity for more than 60 seconds, consider the connection dead
@@ -581,23 +613,23 @@ function setupWebSocketServer() {
             }
         }
     }, 15000); // Check every 15 seconds
-    
+
     // Handle new WebSocket connections
     wss.on('connection', (ws, req) => {
         console.log(`New WebSocket connection from ${req.socket.remoteAddress}`);
-        
+
         // Track client activity
         clientActivity.set(ws, Date.now());
-        
+
         // Store current lobby and player ID for this connection
         let currentLobby = null;
         let currentPlayerId = null;
-        
+
         // Handle incoming messages
         ws.on('message', async (message) => {
             // Update activity timestamp
             clientActivity.set(ws, Date.now());
-            
+
             let event;
             try {
                 event = JSON.parse(message);
@@ -605,7 +637,7 @@ function setupWebSocketServer() {
                 console.error('Invalid JSON message:', message.toString());
                 return;
             }
-            
+
             // Log non-ping messages
             if (event.type !== 'ping') {
                 console.log('Message reçu :', message.toString());
@@ -616,23 +648,23 @@ function setupWebSocketServer() {
                     if (event.data && event.data.gameCode) {
                         const gameCode = event.data.gameCode;
                         const playerId = event.data.player?.id;
-                        
+
                         // Check if the player is banned
                         const game = await Game.findOne({ game_code: gameCode });
                         if (game) {
-                            const isBanned = game.banned_players.some(p => 
+                            const isBanned = game.banned_players.some(p =>
                                 p.player_id && p.player_id.toString() === playerId
                             );
-                            
+
                             if (isBanned) {
                                 // Get the ban reason
-                                const bannedPlayer = game.banned_players.find(p => 
+                                const bannedPlayer = game.banned_players.find(p =>
                                     p.player_id && p.player_id.toString() === playerId
                                 );
                                 const banReason = bannedPlayer ? bannedPlayer.reason : 'No reason provided';
-                                
+
                                 console.log(`Banned player ${playerId} attempted to join game ${gameCode}. Reason: ${banReason}`);
-                                
+
                                 // Send ban message to player
                                 ws.send(JSON.stringify({
                                     type: 'join_banned',
@@ -641,78 +673,78 @@ function setupWebSocketServer() {
                                         reason: banReason
                                     }
                                 }));
-                                
+
                                 return;
                             }
                         }
-                        
+
                         // Check for duplicate join attempts
                         const joinKey = `${playerId}-${gameCode}`;
                         const lastJoinTime = joinAttempts.get(joinKey) || 0;
                         const now = Date.now();
-                        
+
                         // If this is a duplicate join within 5 seconds, ignore it
                         if (now - lastJoinTime < 5000) {
-                            console.log(`Ignoring duplicate join attempt for player ${playerId} in lobby ${gameCode} (${(now - lastJoinTime)/1000}s since last attempt)`);
-                            
+                            console.log(`Ignoring duplicate join attempt for player ${playerId} in lobby ${gameCode} (${(now - lastJoinTime) / 1000}s since last attempt)`);
+
                             // Still send a success response to prevent client from retrying
                             ws.send(JSON.stringify({
                                 type: 'join_success',
                                 data: { gameCode, playerId }
                             }));
-                            
+
                             return;
                         }
-                        
+
                         // Record this join attempt
                         joinAttempts.set(joinKey, now);
-                        
+
                         // Check if this is a reconnection after a disconnection
                         const disconnectionKey = `disconnect-${playerId}-${gameCode}`;
                         const lastDisconnectTime = joinAttempts.get(disconnectionKey) || 0;
-                        
+
                         // If the player recently disconnected, treat this as a reconnection
                         if (now - lastDisconnectTime < 30000) {
-                            console.log(`Player ${playerId} is reconnecting to lobby ${gameCode} after disconnection (${(now - lastDisconnectTime)/1000}s ago)`);
-                            
+                            console.log(`Player ${playerId} is reconnecting to lobby ${gameCode} after disconnection (${(now - lastDisconnectTime) / 1000}s ago)`);
+
                             // Clear any pending leave event processing
                             processedLeaveEvents.delete(`${playerId}-${gameCode}`);
                         }
-                        
+
                         // Clear any processed leave events for this player-lobby pair
                         processedLeaveEvents.delete(`${playerId}-${gameCode}`);
-                        
+
                         // Update current lobby and player ID for this connection
                         currentLobby = gameCode;
                         currentPlayerId = playerId;
-                        
+
                         // Store these values on the WebSocket object for reference
                         ws.currentLobby = gameCode;
                         ws.currentPlayerId = playerId;
-                        
+
                         // Track this player's socket
                         if (playerId) {
                             console.log(`Tracking player ${playerId} in lobby ${gameCode}`);
                             playerSockets.set(playerId, ws);
                         }
-                        
+
                         // Add this connection to the lobby
                         if (!lobbies.has(gameCode)) {
                             lobbies.set(gameCode, new Set());
                         }
                         lobbies.get(gameCode).add(ws);
-                        
+
                         // Debug information about lobbies after adding
                         console.log(`After adding client to lobby ${gameCode}:`);
                         console.log(`Lobby ${gameCode} now has ${lobbies.get(gameCode).size} clients`);
                         console.log(`Current lobbies: ${Array.from(lobbies.keys()).join(', ')}`);
-                        
+
                         // Broadcast the join event to all clients in the lobby
                         broadcastToLobby(gameCode, event, ws);
-                        
+
                         // Update game state
                         await handleGameStateChange(gameCode, event);
-                        
+
                         // Send a success response to confirm the join
                         ws.send(JSON.stringify({
                             type: 'join_success',
@@ -729,46 +761,46 @@ function setupWebSocketServer() {
                             console.log(`Game not found for lobby ${currentLobby}, skipping leave event`);
                             break;
                         }
-                        
+
                         const isGameInProgress = game && game.status === 'in_progress';
                         const playerId = event.data.playerId;
-                        
+
                         // Check if we've already processed a leave event for this player-lobby pair
                         const leaveEventKey = `${playerId}-${currentLobby}`;
                         if (processedLeaveEvents.has(leaveEventKey)) {
                             console.log(`Already processed leave event for player ${playerId} in lobby ${currentLobby}, ignoring duplicate`);
                             return;
                         }
-                        
+
                         // Track leave events to prevent duplicates
                         const leaveKey = `leave-${playerId}-${currentLobby}`;
                         const lastLeaveTime = joinAttempts.get(leaveKey) || 0;
                         const now = Date.now();
-                        
+
                         // If this is a duplicate leave within 5 seconds, ignore it
                         if (now - lastLeaveTime < 5000) {
-                            console.log(`Ignoring duplicate leave attempt for player ${playerId} in lobby ${currentLobby} (${(now - lastLeaveTime)/1000}s since last attempt)`);
+                            console.log(`Ignoring duplicate leave attempt for player ${playerId} in lobby ${currentLobby} (${(now - lastLeaveTime) / 1000}s since last attempt)`);
                             return;
                         }
-                        
+
                         // Check if this player just joined (within the last 3 seconds)
                         const joinKey = `${playerId}-${currentLobby}`;
                         const lastJoinTime = joinAttempts.get(joinKey) || 0;
-                        
+
                         // If the player just joined within 3 seconds, don't process the leave event
                         if (now - lastJoinTime < 3000) {
-                            console.log(`Player ${playerId} just joined lobby ${currentLobby} ${(now - lastJoinTime)/1000}s ago, ignoring leave event`);
+                            console.log(`Player ${playerId} just joined lobby ${currentLobby} ${(now - lastJoinTime) / 1000}s ago, ignoring leave event`);
                             return;
                         }
-                        
+
                         // Record this leave attempt
                         joinAttempts.set(leaveKey, now);
-                        
+
                         // Mark that we've processed a leave event for this player-lobby pair
                         processedLeaveEvents.add(leaveEventKey);
-                        
+
                         console.log(`Processing leave event for player ${playerId} in lobby ${currentLobby}`);
-                        
+
                         // Remove from lobby clients
                         const lobbyClients = lobbies.get(currentLobby);
                         if (lobbyClients) {
@@ -777,18 +809,18 @@ function setupWebSocketServer() {
                                 lobbies.delete(currentLobby);
                             }
                         }
-                        
+
                         // Remove player from tracking
                         if (playerId) {
                             playerSockets.delete(playerId);
                         }
-                        
+
                         // Only broadcast and update game state if game is not in progress
                         // and if we have a valid game and player ID
                         if (!isGameInProgress && game && playerId) {
                             // Check if player is actually in the game before broadcasting
                             const playerInGame = game.players.some(p => p.player_id.toString() === playerId);
-                            
+
                             if (playerInGame) {
                                 // Only broadcast if there are clients in the lobby
                                 if (lobbies.has(currentLobby) && lobbies.get(currentLobby).size > 0) {
@@ -796,7 +828,7 @@ function setupWebSocketServer() {
                                 } else {
                                     console.log(`No clients in lobby ${currentLobby} to broadcast leave event to`);
                                 }
-                                
+
                                 try {
                                     await handleGameStateChange(currentLobby, event);
                                 } catch (error) {
@@ -808,7 +840,7 @@ function setupWebSocketServer() {
                         } else {
                             console.log(`Game ${currentLobby} is in progress or invalid data, not removing player ${playerId}`);
                         }
-                        
+
                         // Reset current lobby and player ID
                         currentLobby = null;
                         currentPlayerId = null;
@@ -822,7 +854,7 @@ function setupWebSocketServer() {
                         await handleGameStateChange(currentLobby, event);
                     }
                     break;
-                    
+
                 case 'game_start':
                     if (currentLobby) {
                         try {
@@ -832,29 +864,29 @@ function setupWebSocketServer() {
                                 // Make sure the event includes the game ID
                                 if (!event.data) event.data = {};
                                 event.data.gameId = game._id.toString();
-                                
+
                                 console.log('Enhanced game_start event with ID:', JSON.stringify(event));
                             }
-                            
+
                             // Ensure the lobby exists
                             ensureLobbyExists(currentLobby);
-                            
+
                             // Broadcast the initial game_start event to all clients
                             broadcastToLobby(currentLobby, event, null);
-                            
+
                             // Process the game start (distribute articles, artifacts, etc.)
                             const enhancedEvent = await handleGameStateChange(currentLobby, event);
-                            
+
                             // Ensure the lobby still exists after game start
                             ensureLobbyExists(currentLobby);
-                            
+
                             // If handleGameStateChange returned an enhanced event, broadcast it
-                            if (enhancedEvent && enhancedEvent.data && 
+                            if (enhancedEvent && enhancedEvent.data &&
                                 (enhancedEvent.data.articlesDistributed || enhancedEvent.data.artifactsDistributed)) {
                                 console.log('Broadcasting enhanced game_start event with distribution results');
                                 broadcastToLobby(currentLobby, enhancedEvent, null);
                             }
-                            
+
                             // Important: Do NOT remove the lobby when the game starts
                             // The lobby is still needed for chat and other communications
                         } catch (error) {
@@ -890,12 +922,12 @@ function setupWebSocketServer() {
                     // The gameCode should be in the event data
                     if (event.data && event.data.gameCode) {
                         const chatGameCode = event.data.gameCode;
-                        
+
                         // Store the game code on the connection if not already set
                         if (!currentLobby) {
                             currentLobby = chatGameCode;
                             ws.currentLobby = chatGameCode;
-                            
+
                             // Add this connection to the lobby if not already there
                             if (!lobbies.has(chatGameCode)) {
                                 lobbies.set(chatGameCode, new Set());
@@ -905,58 +937,58 @@ function setupWebSocketServer() {
                                 console.log(`Added client to lobby ${chatGameCode} for chat`);
                             }
                         }
-                        
+
                         // Add timestamp if not present
                         if (!event.data.timestamp) {
                             event.data.timestamp = Date.now();
                         }
-                        
+
                         // Add message ID if not present
                         if (!event.data.messageId) {
                             event.data.messageId = `${event.data.playerId}-${event.data.timestamp}-${Math.random().toString(36).substring(2, 10)}`;
                         }
-                        
+
                         // Create a copy of the event for broadcasting
                         const broadcastEvent = JSON.parse(JSON.stringify(event));
-                        
+
                         // Add echo flag to indicate this is a server echo
                         broadcastEvent.data.isServerEcho = true;
-                        
+
                         // Log the chat message (without content for privacy)
                         console.log(`Chat message from ${event.data.playerName || 'Unknown'} in lobby ${chatGameCode} (ID: ${event.data.messageId})`);
-                        
+
                         // Broadcast to ALL clients including the sender (null means no exclusion)
                         broadcastToLobby(chatGameCode, broadcastEvent, null);
                     } else {
                         console.error('Chat message missing gameCode:', event);
                     }
                     break;
-                
+
                 case 'private_message':
                     // For private messages, we send only to the specific recipient
                     if (event.data && event.data.gameCode && event.data.recipientId) {
                         const chatGameCode = event.data.gameCode;
                         const recipientId = event.data.recipientId;
                         const senderId = event.data.playerId;
-                        
+
                         // Add timestamp if not present
                         if (!event.data.timestamp) {
                             event.data.timestamp = Date.now();
                         }
-                        
+
                         // Add message ID if not present
                         if (!event.data.messageId) {
                             event.data.messageId = `${senderId}-${recipientId}-${event.data.timestamp}-${Math.random().toString(36).substring(2, 10)}`;
                         }
-                        
+
                         // Create a copy of the event for sending
                         const privateEvent = JSON.parse(JSON.stringify(event));
-                        
+
                         // Add echo flag to indicate this is a server echo
                         privateEvent.data.isServerEcho = true;
-                        
+
                         console.log(`Private message from ${event.data.senderName || 'Unknown'} to user ${recipientId} in lobby ${chatGameCode}`);
-                        
+
                         // Send to the recipient
                         const recipientSocket = playerSockets.get(recipientId);
                         if (recipientSocket && recipientSocket.readyState === WebSocket.OPEN) {
@@ -964,7 +996,7 @@ function setupWebSocketServer() {
                         } else {
                             console.log(`Recipient ${recipientId} is not connected, message not delivered`);
                         }
-                        
+
                         // Send acknowledgment back to the sender
                         ws.send(JSON.stringify({
                             type: 'private_message_sent',
@@ -987,15 +1019,15 @@ function setupWebSocketServer() {
                             console.log(`Game not found for lobby ${currentLobby}, skipping kick event`);
                             break;
                         }
-                        
+
                         // Process the kick
                         await handleGameStateChange(currentLobby, event);
-                        
+
                         // Send kick notification to the kicked player
                         const kickedPlayerId = event.data.playerId;
                         const kickReason = event.data.reason || 'No reason provided';
                         const kickedPlayerSocket = playerSockets.get(kickedPlayerId);
-                        
+
                         if (kickedPlayerSocket && kickedPlayerSocket.readyState === WebSocket.OPEN) {
                             kickedPlayerSocket.send(JSON.stringify({
                                 type: 'player_kicked',
@@ -1005,7 +1037,7 @@ function setupWebSocketServer() {
                                 }
                             }));
                         }
-                        
+
                         // Broadcast to everyone else that the player left
                         const leaveEvent = {
                             type: 'player_leave',
@@ -1014,11 +1046,11 @@ function setupWebSocketServer() {
                                 playerId: kickedPlayerId
                             }
                         };
-                        
+
                         broadcastToLobby(currentLobby, leaveEvent, kickedPlayerSocket);
                     }
                     break;
-                    
+
                 case 'player_ban':
                     if (currentLobby) {
                         // Verify the game exists
@@ -1027,15 +1059,15 @@ function setupWebSocketServer() {
                             console.log(`Game not found for lobby ${currentLobby}, skipping ban event`);
                             break;
                         }
-                        
+
                         // Process the ban
                         await handleGameStateChange(currentLobby, event);
-                        
+
                         // Send ban notification to the banned player
                         const bannedPlayerId = event.data.playerId;
                         const banReason = event.data.reason || 'No reason provided';
                         const bannedPlayerSocket = playerSockets.get(bannedPlayerId);
-                        
+
                         if (bannedPlayerSocket && bannedPlayerSocket.readyState === WebSocket.OPEN) {
                             bannedPlayerSocket.send(JSON.stringify({
                                 type: 'player_banned',
@@ -1045,7 +1077,7 @@ function setupWebSocketServer() {
                                 }
                             }));
                         }
-                        
+
                         // Broadcast to everyone else that the player left
                         const leaveEvent = {
                             type: 'player_leave',
@@ -1054,7 +1086,7 @@ function setupWebSocketServer() {
                                 playerId: bannedPlayerId
                             }
                         };
-                        
+
                         broadcastToLobby(currentLobby, leaveEvent, bannedPlayerSocket);
                     }
                     break;
@@ -1068,22 +1100,22 @@ function setupWebSocketServer() {
         // Handle WebSocket close event
         ws.on('close', async (code, reason) => {
             console.log(`WebSocket closed from ${req.socket.remoteAddress}. Code: ${code}, Reason: ${reason}`);
-            
+
             // Clean up client activity tracking
             clientActivity.delete(ws);
-            
+
             // If this is a normal closure due to page unload, don't process it as a leave event
             // and don't remove the client from the lobby
             if (code === 1000 && reason === "Page unload") {
                 console.log("Client disconnected due to page unload, not processing as leave event");
                 return;
             }
-            
+
             // Use the values stored on the WebSocket object itself
             // as they're more reliable than the closure variables
             const lobbyCode = ws.currentLobby || currentLobby;
             const playerId = ws.currentPlayerId || currentPlayerId;
-            
+
             if (lobbyCode) {
                 // Debug information before removing
                 console.log(`Before removing client from lobby ${lobbyCode}:`);
@@ -1092,31 +1124,31 @@ function setupWebSocketServer() {
                 } else {
                     console.log(`Lobby ${lobbyCode} does not exist`);
                 }
-                
+
                 // Remove this connection from the lobby
                 if (lobbies.has(lobbyCode)) {
                     lobbies.get(lobbyCode).delete(ws);
                     console.log(`After removing client, lobby ${lobbyCode} now has ${lobbies.get(lobbyCode).size} clients`);
-                    
+
                     if (lobbies.get(lobbyCode).size === 0) {
                         lobbies.delete(lobbyCode);
                         console.log(`Removed empty lobby ${lobbyCode}`);
                     }
                 }
-                
+
                 if (playerId) {
                     console.log(`Player ${playerId} disconnected from lobby ${lobbyCode}`);
-                    
+
                     // Check if this was the socket associated with the player
                     if (playerSockets.get(playerId) === ws) {
                         playerSockets.delete(playerId);
                     }
-                    
+
                     // Don't immediately process as a leave event - give time for reconnection
                     // Store the disconnection time
                     const disconnectionKey = `disconnect-${playerId}-${lobbyCode}`;
                     joinAttempts.set(disconnectionKey, Date.now());
-                    
+
                     // We'll process the actual leave event after a delay
                     // This allows for reconnection during page refreshes
                     setTimeout(async () => {
@@ -1125,23 +1157,23 @@ function setupWebSocketServer() {
                             console.log(`Player ${playerId} reconnected to lobby ${lobbyCode}, not processing leave event`);
                             return;
                         }
-                        
+
                         // Check if we've already processed a leave event for this player-lobby pair
                         const leaveEventKey = `${playerId}-${lobbyCode}`;
                         if (processedLeaveEvents.has(leaveEventKey)) {
                             console.log(`Already processed leave event for player ${playerId} in lobby ${lobbyCode}`);
                             return;
                         }
-                        
+
                         console.log(`Player ${playerId} did not reconnect to lobby ${lobbyCode} within timeout, processing leave event`);
-                        
+
                         // Track leave events to prevent duplicates
                         const leaveKey = `leave-${playerId}-${lobbyCode}`;
                         joinAttempts.set(leaveKey, Date.now());
-                        
+
                         // Mark that we've processed a leave event for this player-lobby pair
                         processedLeaveEvents.add(leaveEventKey);
-                        
+
                         // Check if the game is in progress before handling player leave
                         const game = await Game.findOne({ game_code: lobbyCode });
                         if (game && game.status !== 'in_progress') {
@@ -1153,12 +1185,12 @@ function setupWebSocketServer() {
                                     playerId: playerId
                                 }
                             };
-                            
+
                             // Only broadcast if there are clients in the lobby
                             if (lobbies.has(lobbyCode) && lobbies.get(lobbyCode).size > 0) {
                                 broadcastToLobby(lobbyCode, leaveEvent);
                             }
-                            
+
                             // Update game state
                             try {
                                 await handleGameStateChange(lobbyCode, leaveEvent);
@@ -1171,7 +1203,7 @@ function setupWebSocketServer() {
             }
         });
     });
-    
+
     // Clean up on server shutdown
     process.on('SIGINT', () => {
         clearInterval(heartbeatInterval);
@@ -1186,23 +1218,23 @@ function broadcastToLobby(gameCode, event, excludeWs = null) {
     // Don't log ping messages to reduce noise
     if (event.type !== 'ping') {
         console.log(`Broadcasting to lobby ${gameCode}:`, event.type);
-        
+
         // Debug information about lobbies
         console.log(`Current lobbies: ${Array.from(lobbies.keys()).join(', ')}`);
         if (lobbies.has(gameCode)) {
             console.log(`Lobby ${gameCode} has ${lobbies.get(gameCode).size} clients`);
         } else {
             console.log(`Lobby ${gameCode} does not exist`);
-            
+
             // Check if there are any player sockets associated with this game code
             // This could happen if the lobby was converted to a game but the clients are still connected
             const playersInGame = Array.from(playerSockets.entries())
                 .filter(([_, ws]) => ws.currentLobby === gameCode)
                 .map(([playerId, _]) => playerId);
-                
+
             if (playersInGame.length > 0) {
                 console.log(`Found ${playersInGame.length} players still associated with game ${gameCode}`);
-                
+
                 // Recreate the lobby with the existing player sockets
                 const newLobby = new Set();
                 for (const [playerId, ws] of playerSockets.entries()) {
@@ -1210,7 +1242,7 @@ function broadcastToLobby(gameCode, event, excludeWs = null) {
                         newLobby.add(ws);
                     }
                 }
-                
+
                 if (newLobby.size > 0) {
                     console.log(`Recreating lobby ${gameCode} with ${newLobby.size} clients`);
                     lobbies.set(gameCode, newLobby);
@@ -1218,7 +1250,7 @@ function broadcastToLobby(gameCode, event, excludeWs = null) {
             }
         }
     }
-    
+
     // If no lobby exists, nothing to do
     if (!lobbies.has(gameCode) || lobbies.get(gameCode).size === 0) {
         if (event.type !== 'ping') {
@@ -1226,14 +1258,14 @@ function broadcastToLobby(gameCode, event, excludeWs = null) {
         }
         return;
     }
-    
+
     // Prepare the message once
     const message = JSON.stringify(event);
-    
+
     // For ping messages, use a simpler approach
     if (event.type === 'ping') {
         const invalidClients = new Set();
-        
+
         lobbies.get(gameCode).forEach(client => {
             if (client !== excludeWs && client.readyState === WebSocket.OPEN) {
                 try {
@@ -1243,7 +1275,7 @@ function broadcastToLobby(gameCode, event, excludeWs = null) {
                 }
             }
         });
-        
+
         // Remove invalid clients
         if (invalidClients.size > 0) {
             invalidClients.forEach(client => {
@@ -1251,14 +1283,14 @@ function broadcastToLobby(gameCode, event, excludeWs = null) {
             });
             console.log(`Removed ${invalidClients.size} disconnected clients from lobby ${gameCode}`);
         }
-        
+
         return;
     }
-    
+
     // For non-ping messages, track success and failure
     const validClients = new Set();
     const invalidClients = new Set();
-    
+
     // First identify valid and invalid clients
     lobbies.get(gameCode).forEach(client => {
         if (client !== excludeWs) {
@@ -1269,28 +1301,28 @@ function broadcastToLobby(gameCode, event, excludeWs = null) {
             }
         }
     });
-    
+
     // Log the client count
     if (event.type === 'chat_message') {
         console.log(`Broadcasting chat message to ${validClients.size} clients in lobby ${gameCode}`);
     } else {
         console.log(`Found ${validClients.size + invalidClients.size} clients in lobby`);
     }
-    
+
     // Remove invalid clients
     invalidClients.forEach(client => {
         console.log(`Skipping client with readyState: ${client.readyState}`);
         lobbies.get(gameCode).delete(client);
     });
-    
+
     if (invalidClients.size > 0) {
         console.log(`Removed ${invalidClients.size} disconnected clients from lobby ${gameCode}`);
     }
-    
+
     // Send to all valid clients
     let sentCount = 0;
     let failedCount = 0;
-    
+
     validClients.forEach(client => {
         try {
             client.send(message);
@@ -1300,7 +1332,7 @@ function broadcastToLobby(gameCode, event, excludeWs = null) {
             failedCount++;
         }
     });
-    
+
     if (event.type === 'chat_message') {
         console.log(`Chat message sent to ${sentCount} clients, failed to send to ${failedCount} clients`);
     } else {
@@ -1311,13 +1343,11 @@ function broadcastToLobby(gameCode, event, excludeWs = null) {
 // Connexion MongoDB
 mongoose
     .connect(MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
         serverSelectionTimeoutMS: 5000
     })
     .then(() => {
         console.log("✅ MongoDB connected successfully");
-        
+
         // Start HTTP server
         app.listen(PORT, () => {
             console.log(`✅ HTTP server listening on http://localhost:${PORT}`);
@@ -1328,6 +1358,7 @@ mongoose
     })
     .catch((err) => {
         console.error("❌ MongoDB connection error:", err);
+        console.log("⚠️  Make sure MongoDB is running on your system or update the MONGODB_URI in your .env file");
         process.exit(1);
     });
 
@@ -1350,7 +1381,7 @@ cron.schedule('1 0 * * *', async () => {
             return;
         }
 
-        const destination_article = (await postRequest("http://localhost:5000/challenges/create-challenge")).title;
+        const destination_article = (await postRequest("https://apiwikigame.abdelrahimriche.com/challenges/create-challenge")).title;
 
         const challenge = new Challenge({
             date: today,
@@ -1409,7 +1440,7 @@ app._router.stack.forEach(middleware => {
 async function callAPI(endpoint, body, retryCount = 0) {
     try {
         console.log(`Calling API ${endpoint} with body:`, body);
-        const response = await fetch(`http://localhost:${PORT}${endpoint}`, {
+        const response = await fetch(`https://apiwikigame.abdelrahimriche.com${endpoint}`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -1421,7 +1452,7 @@ async function callAPI(endpoint, body, retryCount = 0) {
         if (!response.ok) {
             const errorText = await response.text();
             console.error(`Error ${response.status} from ${endpoint}:`, errorText);
-            
+
             // Check if this is a version conflict error and we haven't exceeded retry attempts
             if (errorText.includes('VersionError') && retryCount < 3) {
                 console.log(`Version conflict detected, retrying (attempt ${retryCount + 1}/3)...`);
@@ -1429,7 +1460,7 @@ async function callAPI(endpoint, body, retryCount = 0) {
                 await new Promise(resolve => setTimeout(resolve, 500 * (retryCount + 1)));
                 return callAPI(endpoint, body, retryCount + 1);
             }
-            
+
             throw new Error(`API error: ${response.status} - ${errorText}`);
         }
 
@@ -1449,7 +1480,7 @@ async function testAPI() {
         // await callAPI("/games/artifacts", {id_game: "67b1f4c36fe85f560dd86791", id_player: "67a7bc84385c3dc88d87a747"});
         // await callAPI("/games/current-article", {id_game: "67b1f4c36fe85f560dd86791", id_player: "67a7bc84385c3dc88d87a747"});
         // await callAPI("/games/distribute-artifacts", {id_game: "67b1f4c36fe85f560dd86791"});
-        await callAPI("/games/storable-artifacts", {id_game: "67b1f4c36fe85f560dd86791"});
+        await callAPI("/games/storable-artifacts", { id_game: "67b1f4c36fe85f560dd86791" });
         //await callAPI("/games/mine-artifact", {id_game: "67cc3a2ee84c208199f2c767", id_player: '67cc3a2ee84c208199f2c764'});
         console.log("API tests completed successfully");
     } catch (error) {
@@ -1467,7 +1498,7 @@ function ensureLobbyExists(gameCode) {
         console.log(`Creating lobby for game ${gameCode}`);
         lobbies.set(gameCode, new Set());
     }
-    
+
     // Check if there are any player sockets associated with this game code
     // that aren't already in the lobby
     for (const [playerId, ws] of playerSockets.entries()) {
@@ -1476,6 +1507,6 @@ function ensureLobbyExists(gameCode) {
             lobbies.get(gameCode).add(ws);
         }
     }
-    
+
     return lobbies.get(gameCode);
 }

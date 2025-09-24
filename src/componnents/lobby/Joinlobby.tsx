@@ -36,7 +36,7 @@ function Joinlobby() {
 
         try {
             setIsCreatingPlayer(true);
-            const response = await fetch('http://localhost:5000/players/create', {
+            const response = await fetch('https://apiwikigame.abdelrahimriche.com/players/create', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -80,7 +80,7 @@ function Joinlobby() {
             // First ensure we have a player
             const playerId = await ensurePlayer();
 
-            const response = await fetch('http://localhost:5000/games/join', {
+            const response = await fetch('https://apiwikigame.abdelrahimriche.com/games/join', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -226,7 +226,7 @@ const LobbySolo: React.FC = () => {
     const fetchLobbyData = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`http://localhost:5000/games/lobby/${gameCode}`, {
+        const response = await fetch(`https://apiwikigame.abdelrahimriche.com/games/lobby/${gameCode}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
