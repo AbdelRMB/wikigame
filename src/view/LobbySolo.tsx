@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useWebSocket, type LobbyEvent } from "../services/WebSocketService";
 import { useParams, useNavigate } from "react-router-dom";
 import { Storage } from "../utils/storage";
+import { getApiUrl } from "../utils/config";
 
 interface LobbySettings {
   max_players: number | null;
@@ -226,7 +227,7 @@ const LobbySolo: React.FC = () => {
     const fetchLobbyData = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`https://apiwikigame.abdelrahimriche.com/games/lobby/${gameCode}`, {
+        const response = await fetch(getApiUrl(`/games/lobby/${gameCode}`), {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',

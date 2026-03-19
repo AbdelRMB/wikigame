@@ -87,7 +87,7 @@ const WikiView: React.FC = () => {
 
         timerRef.current = setTimeout(() => {
           clearStoredTimer();
-          window.location.href = "https://apiwikigame.abdelrahimriche.com/leaderboard";
+          window.location.href = getApiUrl("/leaderboard");
         }, storedTimer.endTime - now);
 
         return;
@@ -122,7 +122,7 @@ const WikiView: React.FC = () => {
       timerRef.current = setTimeout(() => {
         setTimeLeft(null);
         clearStoredTimer();
-        window.location.href = "https://apiwikigame.abdelrahimriche.com/leaderboard";
+        window.location.href = getApiUrl("/leaderboard");
       }, time);
     };
 
@@ -343,7 +343,7 @@ const WikiView: React.FC = () => {
           const leaderBoard = await postRequest(getApiUrl("/games/leaderBoard"), {
             id_game: gameParam
           });
-          window.location.href = "https://apiwikigame.abdelrahimriche.com/leaderboard";
+          window.location.href = getApiUrl("/leaderboard");
         }
 
         if (message) alert(message);

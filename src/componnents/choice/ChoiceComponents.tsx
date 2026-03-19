@@ -15,7 +15,7 @@ const Multi = () => {
 
     try {
       setIsCreatingPlayer(true);
-      const response = await fetch('https://apiwikigame.abdelrahimriche.com/players/create', {
+      const response = await fetch(getApiUrl('/players/create'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -106,7 +106,7 @@ const Solo = () => {
 
     try {
       setIsCreatingPlayer(true);
-      const response = await fetch('https://apiwikigame.abdelrahimriche.com/players/create', {
+      const response = await fetch(getApiUrl('/players/create'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

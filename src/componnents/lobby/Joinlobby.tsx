@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import '../../style/Joinlobby.css';
 import { Storage } from '../../utils/storage';
+import { getApiUrl } from '../../utils/config';
 import Navbar from "../Navbar";
 import { checkIfBanned } from './ModerationComponents';
 
@@ -36,7 +37,7 @@ function Joinlobby() {
 
         try {
             setIsCreatingPlayer(true);
-            const response = await fetch('https://apiwikigame.abdelrahimriche.com/players/create', {
+            const response = await fetch(getApiUrl('/players/create'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -80,7 +81,7 @@ function Joinlobby() {
             // First ensure we have a player
             const playerId = await ensurePlayer();
 
-            const response = await fetch('https://apiwikigame.abdelrahimriche.com/games/join', {
+            const response = await fetch(getApiUrl('/games/join'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
